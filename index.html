@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Inner SPARC Project Finder</title>
+
+    <!-- Favicon for browser tab -->
+    <link rel="icon" type="image/png" href="https://i.imgur.com/TcCQCER.png">
+    <link rel="shortcut icon" type="image/png" href="https://i.imgur.com/TcCQCER.png">
     
-    <!-- Title - will be overridden by Apps Script -->
-    <title>Loading...</title>
-    
-    <!-- Favicon - will be dynamically updated -->
-    <link rel="icon" type="image/png" href="" id="favicon">
-    <link rel="shortcut icon" type="image/png" href="" id="favicon-shortcut">
-    <link rel="apple-touch-icon" href="" id="apple-touch-icon">
+    <!-- For Apple devices -->
+    <link rel="apple-touch-icon" href="https://i.imgur.com/TcCQCER.png">
     
     <style>
         * {
@@ -27,7 +27,7 @@
             font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         
-        /* Minimal loading state */
+        /* Minimal loading spinner */
         .loading-container {
             position: fixed;
             top: 0;
@@ -48,8 +48,8 @@
         }
         
         .loading-spinner {
-            width: 32px;
-            height: 32px;
+            width: 40px;
+            height: 40px;
             border: 3px solid #dde0f0;
             border-top-color: #222689;
             border-radius: 50%;
@@ -65,12 +65,6 @@
             height: 100%;
             border: none;
             display: block;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        
-        #gas-iframe.visible {
-            opacity: 1;
         }
         
         /* Error message */
@@ -132,7 +126,7 @@
     </style>
 </head>
 <body>    
-    <!-- Minimal loading indicator -->
+    <!-- Minimal loading spinner -->
     <div class="loading-container" id="loadingContainer">
         <div class="loading-spinner"></div>
     </div>
@@ -159,59 +153,8 @@
         
         let hasLoaded = false;
         let loadTimeout;
-        let configData = null;
         
-        // ============================================================
-        // FETCH CONFIG FROM GOOGLE SHEETS
-        // ============================================================
-        async function fetchConfig() {
-            try {
-                const response = await fetch(GAS_WEBAPP_URL + '?action=config');
-                if (!response.ok) throw new Error('Failed to fetch config');
-                const config = await response.json();
-                
-                if (config && !config.error) {
-                    configData = config;
-                    applyConfig(config);
-                    return config;
-                } else {
-                    console.warn('Config error:', config?.error);
-                    return null;
-                }
-            } catch (error) {
-                console.warn('Could not fetch config:', error);
-                return null;
-            }
-        }
-        
-        // ============================================================
-        // APPLY CONFIG TO PAGE
-        // ============================================================
-        function applyConfig(config) {
-            // Update title
-            if (config.COMPANY_NAME && config.WEB_APP_NAME) {
-                document.title = config.COMPANY_NAME + ' — ' + config.WEB_APP_NAME;
-            } else if (config.COMPANY_NAME) {
-                document.title = config.COMPANY_NAME;
-            }
-            
-            // Update favicon - get first URL from comma-separated list
-            if (config.LOGO_URL) {
-                const logoUrls = config.LOGO_URL.split(',').map(u => u.trim()).filter(u => u.length > 0);
-                if (logoUrls.length > 0) {
-                    const faviconUrl = logoUrls[0];
-                    
-                    // Update all favicon links
-                    document.getElementById('favicon').href = faviconUrl;
-                    document.getElementById('favicon-shortcut').href = faviconUrl;
-                    document.getElementById('apple-touch-icon').href = faviconUrl;
-                }
-            }
-        }
-        
-        // ============================================================
-        // IFRAME LOADING
-        // ============================================================
+        // Function to show error
         function showError(message) {
             if (hasLoaded) return;
             
@@ -221,29 +164,31 @@
             errorMessage.classList.add('show');
         }
         
+        // Function to handle successful load
         function onIframeLoad() {
             if (hasLoaded) return;
             
             clearTimeout(loadTimeout);
             hasLoaded = true;
             
-            // Hide loading, show iframe
+            // Hide loading spinner
             loadingContainer.classList.add('hidden');
-            iframe.classList.add('visible');
-            
             setTimeout(() => {
                 loadingContainer.style.display = 'none';
             }, 300);
         }
         
+        // Function to handle iframe errors
         function onIframeError() {
             if (hasLoaded) return;
             showError('Failed to load the application. The Google Apps Script web app might be unavailable or the URL is incorrect.');
         }
         
+        // Build the full URL with preserved query parameters and hash
         function buildIframeUrl() {
             let url = GAS_WEBAPP_URL;
             
+            // Preserve URL parameters from the wrapper URL
             const params = new URLSearchParams(window.location.search);
             const hash = window.location.hash;
             
@@ -258,43 +203,31 @@
             return url;
         }
         
-        // ============================================================
-        // INITIALIZE
-        // ============================================================
-        async function init() {
-            // 1. Fetch config from Google Sheets
-            await fetchConfig();
-            
-            // 2. Set iframe URL
-            const iframeUrl = buildIframeUrl();
-            iframe.src = iframeUrl;
-            
-            // 3. Set timeout for loading (15 seconds max)
-            loadTimeout = setTimeout(() => {
-                if (!hasLoaded) {
-                    showError('Loading timeout. The application is taking too long to respond. Please try again.');
-                }
-            }, 15000);
-            
-            // 4. Attach iframe event listeners
-            iframe.addEventListener('load', onIframeLoad);
-            iframe.addEventListener('error', onIframeError);
-            
-            console.log('GitHub Pages wrapper loaded. Iframe URL:', iframeUrl);
-            if (configData) {
-                console.log('Config loaded:', configData.COMPANY_NAME, configData.WEB_APP_NAME);
-            }
-        }
+        // Set iframe source
+        const iframeUrl = buildIframeUrl();
+        iframe.src = iframeUrl;
         
-        // ============================================================
-        // POSTMESSAGE HANDLING
-        // ============================================================
+        // Set timeout for loading (15 seconds max)
+        loadTimeout = setTimeout(() => {
+            if (!hasLoaded) {
+                showError('Loading timeout. The application is taking too long to respond. Please try again.');
+            }
+        }, 15000);
+        
+        // Attach iframe event listeners
+        iframe.addEventListener('load', onIframeLoad);
+        iframe.addEventListener('error', onIframeError);
+        
+        // Optional: Handle postMessage communication from the embedded app
         window.addEventListener('message', function(event) {
+            // Verify origin for security (optional but recommended)
             if (event.origin !== 'https://script.google.com') return;
             
+            // Handle different message types from your Apps Script app
             if (event.data && event.data.type) {
                 switch(event.data.type) {
                     case 'navigate':
+                        // Update URL without reloading
                         if (event.data.url && event.data.url !== window.location.pathname) {
                             history.pushState(null, '', event.data.url);
                         }
@@ -311,20 +244,17 @@
             }
         });
         
-        // ============================================================
-        // BROWSER NAVIGATION
-        // ============================================================
+        // Handle browser back/forward buttons
         window.addEventListener('popstate', function() {
+            // Send message to iframe about URL change
             iframe.contentWindow.postMessage({
                 type: 'popstate',
                 url: window.location.href
             }, '*');
         });
         
-        // ============================================================
-        // START
-        // ============================================================
-        init();
+        // Log successful setup (for debugging)
+        console.log('GitHub Pages wrapper loaded. Iframe URL:', iframeUrl);
     </script>
 </body>
 </html>
