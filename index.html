@@ -177,6 +177,23 @@
     </style>
 </head>
 <body>
+    <div class="loading-container" id="loadingContainer">
+        <div class="loading-content">
+            <div class="loading-logo">
+                <img src="https://i.imgur.com/TcCQCER.png" alt="Inner SPARC">
+            </div>
+        </div>
+    </div>
+    
+    <div class="error-message" id="errorMessage">
+        <div class="error-icon">⚠️</div>
+        <div class="error-title">Connection Error</div>
+        <div class="error-text" id="errorText">
+            Unable to load the application. Please check your internet connection and try again.
+        </div>
+        <button class="error-button" onclick="location.reload()">Retry</button>
+    </div>
+    
     <iframe id="gas-iframe" src="about:blank" allow="geolocation; clipboard-read; clipboard-write"></iframe>
 
     <script>
