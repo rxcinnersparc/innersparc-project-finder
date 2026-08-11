@@ -88,6 +88,28 @@
         .error-message.show {
             display: block;
         }
+
+        /* Close (x) button */
+        .close-button {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            background: transparent;
+            border: none;
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: #7b7fa8;
+            cursor: pointer;
+            line-height: 1;
+            padding: 4px 8px;
+            border-radius: 50%;
+            transition: color 0.2s ease, background 0.2s ease;
+        }
+
+        .close-button:hover {
+            color: #333;
+            background: #f0f1f7;
+        }
         
         .error-icon {
             font-size: 48px;
@@ -132,6 +154,7 @@
     </div>
     
     <div class="error-message" id="errorMessage">
+        <button class="close-button" id="closeErrorModal" aria-label="Close error modal">&times;</button>
         <div class="error-icon">⚠️</div>
         <div class="error-title">Connection Error</div>
         <div class="error-text" id="errorText">
@@ -150,10 +173,26 @@
         const errorMessage = document.getElementById('errorMessage');
         const errorText = document.getElementById('errorText');
         const loadingContainer = document.getElementById('loadingContainer');
+        const closeErrorModal = document.getElementById('closeErrorModal');
         
         let hasLoaded = false;
         let loadTimeout;
         
+        // Function to hide error modal
+        function hideError() {
+            errorMessage.classList.remove('show');
+        }
+
+        // Event listener for close button
+        closeErrorModal.addEventListener('click', hideError);
+
+        // Allow pressing ESC to close modal
+        window.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && errorMessage.classList.contains('show')) {
+                hideError();
+            }
+        });
+
         // Function to show error
         function showError(message) {
             if (hasLoaded) return;
