@@ -244,28 +244,9 @@
             var page = pathnameToPage(window.location.pathname);
             var url = new URL(GAS_WEBAPP_URL);
             
-            // Special handling for /admin route
+            // Special handling to pass 'admin' to the iframe
             if (page === 'admin') {
-                // Check if admin session exists in localStorage
-                var hasAdminSession = false;
-                try {
-                    var adminSession = localStorage.getItem('sparc_admin_session');
-                    if (adminSession) {
-                        var parsed = JSON.parse(adminSession);
-                        // Check if the session is still valid (optional: add expiration check here)
-                        if (parsed && parsed.isAdmin) {
-                            hasAdminSession = true;
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Could not read admin session:', e);
-                }
-
-                if (hasAdminSession) {
-                    url.searchParams.set('page', 'admin');
-                }
-                // If no session, don't pass 'page=admin' -> defaults to normal Index.html
-                
+                url.searchParams.set('page', 'admin');
             } else if (page && page !== 'home') {
                 url.searchParams.set('page', page);
             }
