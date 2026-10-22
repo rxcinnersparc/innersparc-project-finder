@@ -200,6 +200,8 @@
         function pathnameToPage(pathname) {
             var p = (pathname || '/').replace(/^\/+|\/+$/g, '').toLowerCase();
             if (!p) return 'home';
+            
+            if (p === 'admin') return 'admin';
 
             var parts = p.split('/');
             if (parts.length >= 2) {
@@ -217,6 +219,8 @@
         function pageToPathname(page) {
             var p = (page || '').toString().trim().toLowerCase();
             if (!p || p === 'home') return '/';
+            
+            if (p === 'admin') return '/admin';
 
             if (p.indexOf('project-') === 0) {
                 var projSlug = p.slice('project-'.length);
@@ -237,6 +241,13 @@
         // IFRAME SRC BUILDER
         // ------------------------------------------------------------
         function buildIframeUrl() {
+            // Special handling for admin path
+            if (window.location.pathname.toLowerCase().includes('admin')) {
+                var url = new URL(GAS_WEBAPP_URL);
+                url.searchParams.set('page', 'admin');
+                return url.toString();
+            }
+            
             var page = pathnameToPage(window.location.pathname);
             var url = new URL(GAS_WEBAPP_URL);
             if (page && page !== 'home') url.searchParams.set('page', page);
