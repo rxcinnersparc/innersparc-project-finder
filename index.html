@@ -179,131 +179,226 @@
         // ⚠️ IMPORTANT: Replace this with your actual Google Apps Script Web App URL
         const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzAOnAB1ZKUQ2YJ8vHjl0pM5sYG_XHXg6ZCHpMNinGRbGRaKARzmbhVU-bXzLQGOcL2iw/exec';
         
+        // ------------------------------------------------------------
+        // ROUTE TABLES
+        // ------------------------------------------------------------
+        const PROJECT_PREFIX = 'project';   // /project/<slug>
+        const COMPARE_PREFIX = 'compare';   // /compare/<slug-a>-vs-<slug-b>
+
         const iframe = document.getElementById('gas-iframe');
         const errorMessage = document.getElementById('errorMessage');
         const errorText = document.getElementById('errorText');
         const loadingContainer = document.getElementById('loadingContainer');
         const closeErrorModal = document.getElementById('closeErrorModal');
-        
+
         let hasLoaded = false;
         let loadTimeout;
-        
-        // Function to hide error modal
-        function hideError() {
-            errorMessage.classList.remove('show');
+
+        // ------------------------------------------------------------
+        // PATH ⇄ PAGE TRANSLATORS
+        // ------------------------------------------------------------
+        function pathnameToPage(pathname) {
+            var p = (pathname || '/').replace(/^\/+|\/+$/g, '').toLowerCase();
+            if (!p) return 'home';
+
+            if (p.indexOf(PROJECT_PREFIX + '/') === 0) {
+                var slug = p.slice(PROJECT_PREFIX.length + 1);
+                if (slug) return 'project-' + slug;
+                return 'home';
+            }
+
+            if (p.indexOf(COMPARE_PREFIX + '/') === 0) {
+                var compound = p.slice(COMPARE_PREFIX.length + 1);
+                if (compound) return 'compare-' + compound;
+                return 'home';
+            }
+
+            return 'home';
         }
 
-        // Event listener for close button
-        closeErrorModal.addEventListener('click', hideError);
+        function pageToPathname(page) {
+            var p = (page || '').toString().trim().toLowerCase();
+            if (!p || p === 'home') return '/';
 
-        // Allow pressing ESC to close modal
-        window.addEventListener('keydown', function(event) {
+            if (p.indexOf('project-') === 0) {
+                var projSlug = p.slice('project-'.length);
+                if (projSlug) return '/' + PROJECT_PREFIX + '/' + projSlug;
+                return '/';
+            }
+
+            if (p.indexOf('compare-') === 0) {
+                var cmpSlug = p.slice('compare-'.length);
+                if (cmpSlug) return '/' + COMPARE_PREFIX + '/' + cmpSlug;
+                return '/';
+            }
+
+            return '/';
+        }
+
+        // ------------------------------------------------------------
+        // IFRAME SRC BUILDER
+        // ------------------------------------------------------------
+        function buildIframeUrl() {
+            var page = pathnameToPage(window.location.pathname);
+            var url = new URL(GAS_WEBAPP_URL);
+            if (page && page !== 'home') url.searchParams.set('page', page);
+            return url.toString();
+        }
+
+        // ------------------------------------------------------------
+        // LEGACY REDIRECT: ?page=… → /project/… etc.
+        // ------------------------------------------------------------
+        (function migrateLegacyQueryString() {
+            try {
+                var params = new URLSearchParams(window.location.search);
+                var legacy = params.get('page');
+                if (!legacy) return;
+                var cleanPath = pageToPathname(legacy);
+                params.delete('page');
+                var tail = params.toString();
+                var newUrl = cleanPath + (tail ? ('?' + tail) : '');
+                window.history.replaceState({ page: legacy }, '', newUrl);
+            } catch (e) { /* ignore */ }
+        })();
+
+        const iframeUrl = buildIframeUrl();
+        iframe.src = iframeUrl;
+
+        // ------------------------------------------------------------
+        // ORIGIN TRUST + READY STATE
+        // ------------------------------------------------------------
+        function isTrustedOrigin(origin) {
+            if (!origin || origin === 'null') return true;
+            return origin === 'https://script.google.com' ||
+                   origin === 'https://script.googleusercontent.com' ||
+                   origin.indexOf('.googleusercontent.com') !== -1 ||
+                   origin.indexOf('.google.com') !== -1;
+        }
+
+        let iframeReady = false;
+        let pendingPage = null;
+
+        function relayToIframe(msg) {
+            function relay(win, depth) {
+                if (!win || depth > 6) return;
+                try { win.postMessage(msg, '*'); } catch (e) {}
+                try {
+                    for (var i = 0; i < win.frames.length; i++) {
+                        relay(win.frames[i], depth + 1);
+                    }
+                } catch (e) {}
+            }
+            relay(iframe.contentWindow, 0);
+        }
+
+        // ------------------------------------------------------------
+        // MESSAGES FROM GAS
+        // ------------------------------------------------------------
+        window.addEventListener('message', function (event) {
+            if (event.source === window) return;
+            if (!isTrustedOrigin(event.origin)) return;
+
+            var data = event.data;
+            if (!data || !data.type) return;
+
+            // New canonical navigate message
+            if (data.type === 'projectfinder:navigate') {
+                var page = (data.page || 'home').toString();
+                var newPath = pageToPathname(page);
+                var url = new URL(window.location.href);
+                url.pathname = newPath;
+                url.searchParams.delete('page');
+                var target = url.pathname + (url.search || '') + url.hash;
+                if (target !== (window.location.pathname + window.location.search + window.location.hash)) {
+                    if (data.replace) {
+                        window.history.replaceState({ page: page }, '', target);
+                    } else {
+                        window.history.pushState({ page: page }, '', target);
+                    }
+                }
+                if (data.title) document.title = data.title;
+                return;
+            }
+
+            // Legacy messages kept working (backward compat with old GAS code)
+            if (data.type === 'navigate') {
+                if (data.url && data.url !== window.location.pathname) {
+                    window.history.pushState(null, '', data.url);
+                }
+                return;
+            }
+            if (data.type === 'setTitle') {
+                if (data.title) document.title = data.title;
+                return;
+            }
+
+            if (data.type === 'projectfinder:ready' || data.type === 'ready') {
+                iframeReady = true;
+                var initial = pendingPage !== null
+                    ? pendingPage
+                    : pathnameToPage(window.location.pathname);
+                pendingPage = null;
+                relayToIframe({ type: 'projectfinder:popstate', page: initial });
+                return;
+            }
+        });
+
+        // ------------------------------------------------------------
+        // BROWSER BACK / FORWARD
+        // ------------------------------------------------------------
+        window.addEventListener('popstate', function () {
+            var page = pathnameToPage(window.location.pathname);
+            if (!iframeReady) {
+                pendingPage = page;
+                return;
+            }
+            relayToIframe({ type: 'projectfinder:popstate', page: page });
+        });
+
+        // ------------------------------------------------------------
+        // IFRAME LOAD / ERROR
+        // ------------------------------------------------------------
+        function hideError() { errorMessage.classList.remove('show'); }
+        closeErrorModal.addEventListener('click', hideError);
+        window.addEventListener('keydown', function (event) {
             if (event.key === 'Escape' && errorMessage.classList.contains('show')) {
                 hideError();
             }
         });
 
-        // Function to show error
         function showError(message) {
             if (hasLoaded) return;
-            
             clearTimeout(loadTimeout);
             loadingContainer.classList.add('hidden');
             errorText.textContent = message || 'Unable to load the application. Please check your internet connection and try again.';
             errorMessage.classList.add('show');
         }
-        
-        // Function to handle successful load
+
         function onIframeLoad() {
             if (hasLoaded) return;
-            
             clearTimeout(loadTimeout);
             hasLoaded = true;
-            
-            // Hide loading spinner
             loadingContainer.classList.add('hidden');
-            setTimeout(() => {
+            setTimeout(function () {
                 loadingContainer.style.display = 'none';
             }, 300);
         }
-        
-        // Function to handle iframe errors
+
         function onIframeError() {
             if (hasLoaded) return;
             showError('Failed to load the application. The Google Apps Script web app might be unavailable or the URL is incorrect.');
         }
-        
-        // Build the full URL with preserved query parameters and hash
-        function buildIframeUrl() {
-            let url = GAS_WEBAPP_URL;
-            
-            // Preserve URL parameters from the wrapper URL
-            const params = new URLSearchParams(window.location.search);
-            const hash = window.location.hash;
-            
-            if (params.toString()) {
-                url += '?' + params.toString();
-            }
-            
-            if (hash) {
-                url += (params.toString() ? '&' : '?') + 'hash=' + encodeURIComponent(hash.substring(1));
-            }
-            
-            return url;
-        }
-        
-        // Set iframe source
-        const iframeUrl = buildIframeUrl();
-        iframe.src = iframeUrl;
-        
-        // Set timeout for loading (15 seconds max)
-        loadTimeout = setTimeout(() => {
+
+        iframe.addEventListener('load', onIframeLoad);
+        iframe.addEventListener('error', onIframeError);
+
+        loadTimeout = setTimeout(function () {
             if (!hasLoaded) {
                 showError('Loading timeout. The application is taking too long to respond. Please try again.');
             }
         }, 15000);
-        
-        // Attach iframe event listeners
-        iframe.addEventListener('load', onIframeLoad);
-        iframe.addEventListener('error', onIframeError);
-        
-        // Optional: Handle postMessage communication from the embedded app
-        window.addEventListener('message', function(event) {
-            // Verify origin for security (optional but recommended)
-            if (event.origin !== 'https://script.google.com') return;
-            
-            // Handle different message types from your Apps Script app
-            if (event.data && event.data.type) {
-                switch(event.data.type) {
-                    case 'navigate':
-                        // Update URL without reloading
-                        if (event.data.url && event.data.url !== window.location.pathname) {
-                            history.pushState(null, '', event.data.url);
-                        }
-                        break;
-                    case 'setTitle':
-                        if (event.data.title) {
-                            document.title = event.data.title;
-                        }
-                        break;
-                    case 'ready':
-                        console.log('Apps Script app is ready');
-                        break;
-                }
-            }
-        });
-        
-        // Handle browser back/forward buttons
-        window.addEventListener('popstate', function() {
-            // Send message to iframe about URL change
-            iframe.contentWindow.postMessage({
-                type: 'popstate',
-                url: window.location.href
-            }, '*');
-        });
-        
-        // Log successful setup (for debugging)
-        console.log('GitHub Pages wrapper loaded. Iframe URL:', iframeUrl);
+
+        console.log('Project Finder wrapper loaded. Iframe URL:', iframeUrl);
     </script>
 </body>
 </html>
