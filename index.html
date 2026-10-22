@@ -201,16 +201,14 @@
             var p = (pathname || '/').replace(/^\/+|\/+$/g, '').toLowerCase();
             if (!p) return 'home';
 
-            if (p.indexOf(PROJECT_PREFIX + '/') === 0) {
-                var slug = p.slice(PROJECT_PREFIX.length + 1);
-                if (slug) return 'project-' + slug;
-                return 'home';
-            }
-
-            if (p.indexOf(COMPARE_PREFIX + '/') === 0) {
-                var compound = p.slice(COMPARE_PREFIX.length + 1);
-                if (compound) return 'compare-' + compound;
-                return 'home';
+            var parts = p.split('/');
+            if (parts.length >= 2) {
+                if (parts[0] === PROJECT_PREFIX) {
+                    return 'project-' + parts[1];
+                }
+                if (parts[0] === COMPARE_PREFIX) {
+                    return 'compare-' + parts[1];
+                }
             }
 
             return 'home';
