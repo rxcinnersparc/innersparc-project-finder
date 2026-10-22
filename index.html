@@ -244,19 +244,13 @@
             var page = pathnameToPage(window.location.pathname);
             var url = new URL(GAS_WEBAPP_URL);
             
-            // Special handling to pass 'admin' to the iframe
+            // Special handling to pass 'admin' to the iframe (no restriction)
             if (page === 'admin') {
                 url.searchParams.set('page', 'admin');
             } else if (page && page !== 'home') {
                 url.searchParams.set('page', page);
             }
             
-            return url.toString();
-        }
-            
-            var page = pathnameToPage(window.location.pathname);
-            var url = new URL(GAS_WEBAPP_URL);
-            if (page && page !== 'home') url.searchParams.set('page', page);
             return url.toString();
         }
 
