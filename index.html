@@ -277,6 +277,7 @@
 
         let iframeReady = false;
         let pendingPage = null;
+        let lastEarlyBroadcast = null;
 
         function relayToIframe(msg) {
             function relay(win, depth) {
@@ -303,6 +304,12 @@
 
             // New canonical navigate message
             if (data.type === 'projectfinder:navigate') {
+                // Buffer incoming broadcasts until the iframe signals it is ready
+                if (!iframeReady) {
+                    lastEarlyBroadcast = data;
+                    return;
+                }
+
                 var page = (data.page || 'home').toString();
                 var newPath = pageToPathname(page);
                 var url = new URL(window.location.href);
@@ -334,6 +341,23 @@
 
             if (data.type === 'projectfinder:ready' || data.type === 'ready') {
                 iframeReady = true;
+
+                // If we captured an early route change while waiting for readiness, apply it
+                if (lastEarlyBroadcast) {
+                    var earlyPage = (lastEarlyBroadcast.page || 'home').toString();
+                    var earlyPath = pageToPathname(earlyPage);
+                    var earlyUrl = new URL(window.location.href);
+                    earlyUrl.pathname = earlyPath;
+                    earlyUrl.searchParams.delete('page');
+                    var earlyTarget = earlyUrl.pathname + (earlyUrl.search || '') + earlyUrl.hash;
+                    
+                    window.history.pushState({ page: earlyPage }, '', earlyTarget);
+                    if (lastEarlyBroadcast.title) document.title = lastEarlyBroadcast.title;
+                    
+                    lastEarlyBroadcast = null;
+                    return;
+                }
+
                 var initial = pendingPage !== null
                     ? pendingPage
                     : pathnameToPage(window.location.pathname);
